@@ -192,6 +192,11 @@ class _FakeMediaRepository:
     def __init__(self, lock: _FakeLock, storage: _FakeStorage):
         self.local_media_upload_linearizer = lock
         self.media_storage = storage
+        self.deleted_notifications: list[str] = []
+
+    async def notify_media_deleted(self, media_id: str) -> None:
+        assert self.lock.active
+        self.deleted_notifications.append(media_id)
 
 
 class TelecryptStorageValidationTests(unittest.TestCase):
@@ -306,6 +311,7 @@ class TelecryptStorageValidationTests(unittest.TestCase):
                 "lock-exit",
             ],
         )
+        self.assertEqual(servlet.media_repo.deleted_notifications, ["file"])
         self.assertEqual(
             [
                 None
@@ -456,6 +462,7 @@ class TelecryptStorageValidationTests(unittest.TestCase):
         self.assertEqual(len(storage.delete_calls), 2)
         self.assertEqual(store.metadata_attempts, [["file"], ["file"]])
         self.assertEqual(store.deleted_media_ids, [["file"]])
+        self.assertEqual(servlet.media_repo.deleted_notifications, ["file"])
         self.assertEqual(
             events,
             [

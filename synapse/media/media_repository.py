@@ -1665,6 +1665,16 @@ class MediaRepository:
         """
         return await self._remove_local_media_from_disk(media_ids)
 
+    async def notify_media_deleted(self, media_id: str) -> None:
+        """Notify registered modules after an owned local media deletion.
+
+        User-facing deletion endpoints remove both provider objects and the local
+        metadata row themselves, so they cannot use ``_remove_local_media_from_disk``.
+        Keep the callback dispatch in this repository instead of reaching into the
+        module callback registry from a REST servlet.
+        """
+        await self.media_repository_callbacks.on_media_deleted(media_id)
+
     async def delete_old_local_media(
         self,
         before_ts: int,
@@ -1735,6 +1745,12 @@ class MediaRepository:
             await self.store.delete_url_cache_media((media_id,))
 
             removed_media.append(media_id)
+
+            # Only ordinary local user uploads belong to TeleCrypt's accounting ledger. URL
+            # previews and remote/cache records are intentionally excluded. The callback is
+            # best-effort by contract and cannot turn a completed deletion into a failure.
+            if media is not None and not media.url_cache and media.user_id is not None:
+                await self.media_repository_callbacks.on_media_deleted(media_id)
 
         return removed_media, len(removed_media)
 
