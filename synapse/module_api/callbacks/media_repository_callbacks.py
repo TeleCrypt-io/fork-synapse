@@ -37,6 +37,12 @@ ON_MEDIA_UPLOAD_LIMIT_EXCEEDED_CALLBACK = Callable[
     [str, MediaUploadLimit, int, int], Awaitable[None]
 ]
 
+# Called after a local user media object and its metadata have been deleted. The callback receives
+# only the stable media ID; ownership and byte accounting remain the responsibility of the
+# application that recorded the upload. Notification failures are logged and never undo a
+# successful media deletion.
+ON_MEDIA_DELETED_CALLBACK = Callable[[str], Awaitable[None]]
+
 
 class MediaRepositoryModuleApiCallbacks:
     def __init__(self, hs: "HomeServer") -> None:
@@ -54,6 +60,7 @@ class MediaRepositoryModuleApiCallbacks:
         self._on_media_upload_limit_exceeded_callbacks: list[
             ON_MEDIA_UPLOAD_LIMIT_EXCEEDED_CALLBACK
         ] = []
+        self._on_media_deleted_callbacks: list[ON_MEDIA_DELETED_CALLBACK] = []
 
     def register_callbacks(
         self,
@@ -64,6 +71,7 @@ class MediaRepositoryModuleApiCallbacks:
         | None = None,
         on_media_upload_limit_exceeded: ON_MEDIA_UPLOAD_LIMIT_EXCEEDED_CALLBACK
         | None = None,
+        on_media_deleted: ON_MEDIA_DELETED_CALLBACK | None = None,
     ) -> None:
         """Register callbacks from module for each hook."""
         if get_media_config_for_user is not None:
@@ -83,6 +91,9 @@ class MediaRepositoryModuleApiCallbacks:
             self._on_media_upload_limit_exceeded_callbacks.append(
                 on_media_upload_limit_exceeded
             )
+
+        if on_media_deleted is not None:
+            self._on_media_deleted_callbacks.append(on_media_deleted)
 
     async def get_media_config_for_user(self, user_id: str) -> JsonDict | None:
         for callback in self._get_media_config_for_user_callbacks:
@@ -158,3 +169,19 @@ class MediaRepositoryModuleApiCallbacks:
                 await delay_cancellation(
                     callback(user_id, limit_copy, sent_bytes, attempted_bytes)
                 )
+
+    async def on_media_deleted(self, media_id: str) -> None:
+        """Notify modules after deletion without making deletion depend on them."""
+        for callback in self._on_media_deleted_callbacks:
+            with Measure(
+                self.clock,
+                name=f"{callback.__module__}.{callback.__qualname__}",
+                server_name=self.server_name,
+            ):
+                try:
+                    await delay_cancellation(callback(media_id))
+                except Exception:
+                    logger.exception(
+                        "media deletion callback failed for %s; deletion remains complete",
+                        media_id,
+                    )

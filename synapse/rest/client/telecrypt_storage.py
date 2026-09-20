@@ -217,4 +217,6 @@ class TelecryptDeleteMediaServlet(RestServlet):
                 ) from None
 
             await self.store.delete_local_media(existing_media_ids)
+            for media_id in existing_media_ids:
+                await self.media_repo.notify_media_deleted(media_id)
         return HTTPStatus.NO_CONTENT, {}
