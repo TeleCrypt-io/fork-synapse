@@ -99,6 +99,7 @@ from synapse.module_api.callbacks.media_repository_callbacks import (
     IS_USER_ALLOWED_TO_UPLOAD_MEDIA_OF_SIZE_CALLBACK,
     ON_MEDIA_DELETED_CALLBACK,
     ON_MEDIA_UPLOAD_LIMIT_EXCEEDED_CALLBACK,
+    ON_MEDIA_UPLOADED_CALLBACK,
 )
 from synapse.module_api.callbacks.ratelimit_callbacks import (
     GET_RATELIMIT_OVERRIDE_FOR_USER_CALLBACK,
@@ -473,6 +474,7 @@ class ModuleApi:
         on_media_upload_limit_exceeded: ON_MEDIA_UPLOAD_LIMIT_EXCEEDED_CALLBACK
         | None = None,
         on_media_deleted: ON_MEDIA_DELETED_CALLBACK | None = None,
+        on_media_uploaded: ON_MEDIA_UPLOADED_CALLBACK | None = None,
     ) -> None:
         """Registers callbacks for media repository capabilities.
         Added in Synapse v1.132.0.
@@ -483,6 +485,7 @@ class ModuleApi:
             get_media_upload_limits_for_user=get_media_upload_limits_for_user,
             on_media_upload_limit_exceeded=on_media_upload_limit_exceeded,
             on_media_deleted=on_media_deleted,
+            on_media_uploaded=on_media_uploaded,
         )
 
     def register_third_party_rules_callbacks(

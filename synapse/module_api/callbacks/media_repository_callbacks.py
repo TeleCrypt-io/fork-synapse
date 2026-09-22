@@ -43,6 +43,8 @@ ON_MEDIA_UPLOAD_LIMIT_EXCEEDED_CALLBACK = Callable[
 # successful media deletion.
 ON_MEDIA_DELETED_CALLBACK = Callable[[str], Awaitable[None]]
 
+ON_MEDIA_UPLOADED_CALLBACK = Callable[[str, str, int], Awaitable[None]]
+
 
 class MediaRepositoryModuleApiCallbacks:
     def __init__(self, hs: "HomeServer") -> None:
@@ -61,6 +63,7 @@ class MediaRepositoryModuleApiCallbacks:
             ON_MEDIA_UPLOAD_LIMIT_EXCEEDED_CALLBACK
         ] = []
         self._on_media_deleted_callbacks: list[ON_MEDIA_DELETED_CALLBACK] = []
+        self._on_media_uploaded_callbacks: list[ON_MEDIA_UPLOADED_CALLBACK] = []
 
     def register_callbacks(
         self,
@@ -72,6 +75,7 @@ class MediaRepositoryModuleApiCallbacks:
         on_media_upload_limit_exceeded: ON_MEDIA_UPLOAD_LIMIT_EXCEEDED_CALLBACK
         | None = None,
         on_media_deleted: ON_MEDIA_DELETED_CALLBACK | None = None,
+        on_media_uploaded: ON_MEDIA_UPLOADED_CALLBACK | None = None,
     ) -> None:
         """Register callbacks from module for each hook."""
         if get_media_config_for_user is not None:
@@ -94,6 +98,9 @@ class MediaRepositoryModuleApiCallbacks:
 
         if on_media_deleted is not None:
             self._on_media_deleted_callbacks.append(on_media_deleted)
+
+        if on_media_uploaded is not None:
+            self._on_media_uploaded_callbacks.append(on_media_uploaded)
 
     async def get_media_config_for_user(self, user_id: str) -> JsonDict | None:
         for callback in self._get_media_config_for_user_callbacks:
@@ -183,5 +190,23 @@ class MediaRepositoryModuleApiCallbacks:
                 except Exception:
                     logger.exception(
                         "media deletion callback failed for %s; deletion remains complete",
+                        media_id,
+                    )
+
+    async def on_media_uploaded(
+        self, user_id: str, media_id: str, size_bytes: int
+    ) -> None:
+        """Notify modules after upload without making upload depend on them."""
+        for callback in self._on_media_uploaded_callbacks:
+            with Measure(
+                self.clock,
+                name=f"{callback.__module__}.{callback.__qualname__}",
+                server_name=self.server_name,
+            ):
+                try:
+                    await delay_cancellation(callback(user_id, media_id, size_bytes))
+                except Exception:
+                    logger.exception(
+                        "media upload callback failed for %s; upload remains complete",
                         media_id,
                     )

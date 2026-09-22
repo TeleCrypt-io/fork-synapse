@@ -3237,9 +3237,12 @@ class MediaUploadLimitsModuleOverrides(unittest.HomeserverTestCase):
         self.user3 = self.register_user("user3", "pass")
         self.tok3 = self.login("user3", "pass")
         self.last_media_upload_limit_exceeded = None
+        self.media_upload_notifications: list[tuple[str, str, int]] = []
+        self.fail_media_upload_callback = False
         self.hs.get_module_api().register_media_repository_callbacks(
             get_media_upload_limits_for_user=self._get_media_upload_limits_for_user,
             on_media_upload_limit_exceeded=self._on_media_upload_limit_exceeded,
+            on_media_uploaded=self._on_media_uploaded,
         )
 
     def create_resource_dict(self) -> dict[str, Resource]:
@@ -3257,6 +3260,35 @@ class MediaUploadLimitsModuleOverrides(unittest.HomeserverTestCase):
             shorthand=False,
             content_type=b"text/plain",
         )
+
+    async def _on_media_uploaded(
+        self, user_id: str, media_id: str, size_bytes: int
+    ) -> None:
+        self.media_upload_notifications.append((user_id, media_id, size_bytes))
+        if self.fail_media_upload_callback:
+            raise RuntimeError("media upload callback failure")
+
+    def test_media_uploaded_callback_receives_upload_details(self) -> None:
+        channel = self.upload_media(67, self.tok1)
+        self.assertEqual(channel.code, 200)
+
+        content_uri = channel.json_body["content_uri"]
+        _server_name, _port, media_id = parse_and_validate_mxc_uri(content_uri)
+        self.assertEqual(
+            self.media_upload_notifications,
+            [(self.user1, media_id, 67)],
+        )
+
+    def test_media_uploaded_callback_is_absent_for_denied_upload(self) -> None:
+        channel = self.upload_media(5001, self.tok1)
+        self.assertEqual(channel.code, 403)
+        self.assertEqual(self.media_upload_notifications, [])
+
+    def test_media_uploaded_callback_failure_does_not_fail_upload(self) -> None:
+        self.fail_media_upload_callback = True
+        channel = self.upload_media(67, self.tok1)
+        self.assertEqual(channel.code, 200)
+        self.assertEqual(len(self.media_upload_notifications), 1)
 
     def test_upload_under_limit(self) -> None:
         """Test that uploading media under the limit works."""

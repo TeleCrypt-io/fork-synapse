@@ -457,6 +457,12 @@ class MediaRepository:
                 quarantined_by="system" if should_quarantine else None,
             )
 
+        await self.media_repository_callbacks.on_media_uploaded(
+            user_id=auth_user.to_string(),
+            media_id=media_id,
+            size_bytes=content_length,
+        )
+
         try:
             await self._generate_thumbnails(None, media_id, media_id, media_type)
         except Exception as e:
