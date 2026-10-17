@@ -89,15 +89,15 @@ class VersionsRestServlet(RestServlet):
 
             if user_id is not None:
                 unstable_features = versions_response_body["unstable_features"]
-                unstable_features["org.matrix.msc3881"] = (
-                    await self.store.is_feature_enabled(
-                        user_id, ExperimentalFeature.MSC3881
-                    )
+                unstable_features[
+                    "org.matrix.msc3881"
+                ] = await self.store.is_feature_enabled(
+                    user_id, ExperimentalFeature.MSC3881
                 )
-                unstable_features["org.matrix.simplified_msc3575"] = (
-                    await self.store.is_feature_enabled(
-                        user_id, ExperimentalFeature.MSC3575
-                    )
+                unstable_features[
+                    "org.matrix.simplified_msc3575"
+                ] = await self.store.is_feature_enabled(
+                    user_id, ExperimentalFeature.MSC3575
                 )
 
         return (

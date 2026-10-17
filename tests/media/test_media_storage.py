@@ -691,7 +691,9 @@ class MediaStorageTests(unittest.HomeserverTestCase):
         delete_remote_media.assert_awaited_once_with(self.hs.hostname, media_id)
         self.assertEqual(self.deleted_notifications, [media_id])
 
-    def test_repository_local_deletion_callback_failure_does_not_fail_delete(self) -> None:
+    def test_repository_local_deletion_callback_failure_does_not_fail_delete(
+        self,
+    ) -> None:
         media_id = "repository-callback-failure"
         path = self.filepaths.local_media_filepath_rel(media_id)
         local_path = os.path.join(self.primary_base_path, path)
@@ -719,7 +721,9 @@ class MediaStorageTests(unittest.HomeserverTestCase):
             patch.object(media_repo.store, "delete_url_cache", new=AsyncMock()),
             patch.object(media_repo.store, "delete_url_cache_media", new=AsyncMock()),
         ):
-            removal = defer.ensureDeferred(media_repo.delete_local_media_ids([media_id]))
+            removal = defer.ensureDeferred(
+                media_repo.delete_local_media_ids([media_id])
+            )
             self.assertEqual(self.get_success(removal), ([media_id], 1))
 
         self.assertFalse(os.path.exists(local_path))

@@ -1017,9 +1017,7 @@ class MediaRepositoryStore(MediaRepositoryBackgroundUpdateStore):
                 keyvalues={},
             )
 
-        await self.db_pool.runInteraction(
-            "delete_local_media", _delete_local_media_txn
-        )
+        await self.db_pool.runInteraction("delete_local_media", _delete_local_media_txn)
 
     async def get_is_hash_quarantined(self, sha256: str) -> bool:
         """Get whether a specific sha256 hash digest matches any quarantined media.

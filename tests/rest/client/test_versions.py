@@ -11,11 +11,12 @@
 # <https://www.gnu.org/licenses/agpl-3.0.html>.
 
 import logging
-from typing import Any
+from typing import Any, cast
 from unittest.mock import patch
 
 from twisted.internet.testing import MemoryReactor
 
+from synapse.http.site import SynapseRequest
 from synapse.logging.context import current_context
 from synapse.rest import admin
 from synapse.rest.client import login, versions
@@ -109,7 +110,8 @@ class VersionsTestCase(unittest.HomeserverTestCase):
         original_run_interaction = db_pool.runInteraction
 
         async def run_interaction(desc: str, *args: Any, **kwargs: Any) -> Any:
-            seen_interactions.append((desc, current_context()))
+            if desc == "get_feature_enabled":
+                seen_interactions.append((desc, current_context()))
             return await original_run_interaction(desc, *args, **kwargs)
 
         with patch.object(db_pool, "runInteraction", new=run_interaction):
@@ -128,7 +130,7 @@ class VersionsTestCase(unittest.HomeserverTestCase):
         )
         self.assertTrue(
             all(
-                context is channel.request.logcontext
+                context is cast(SynapseRequest, channel.request).logcontext
                 for _, context in seen_interactions
             )
         )

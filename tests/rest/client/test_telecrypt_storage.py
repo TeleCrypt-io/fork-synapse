@@ -15,10 +15,13 @@
 #
 
 import json
+from collections.abc import AsyncIterator, Generator
 from contextlib import asynccontextmanager
 from io import BytesIO
+from typing import Any
 
 from twisted.internet import defer
+from twisted.internet.defer import Deferred
 from twisted.trial import unittest
 
 from synapse.api.errors import Codes, NotFoundError, SynapseError
@@ -97,7 +100,9 @@ class _FakeRequester:
 
 
 class _FakeAuth:
-    async def get_user_by_req(self, request, allow_guest=False):
+    async def get_user_by_req(
+        self, request: Any, allow_guest: bool = False
+    ) -> _FakeRequester:
         return _FakeRequester()
 
 
@@ -107,7 +112,7 @@ class _FakeLock:
         self.active = False
 
     @asynccontextmanager
-    async def queue(self, user_id: str):
+    async def queue(self, user_id: str) -> AsyncIterator[None]:
         self.events.append("lock-enter")
         self.active = True
         try:
@@ -122,9 +127,9 @@ class _FakeStore:
         self,
         lock: _FakeLock,
         events: list[str],
-        media=None,
+        media: Any = None,
         thumbnails: list[ThumbnailInfo] | None = None,
-        media_by_id=None,
+        media_by_id: dict[str, Any] | None = None,
         metadata_failure: Exception | None = None,
     ):
         self.lock = lock
@@ -132,26 +137,29 @@ class _FakeStore:
         self.thumbnails = thumbnails or []
         self.media_by_id = media_by_id
         self.metadata_failure = metadata_failure
-        self.metadata_attempts = []
-        self.deleted_media_ids = []
-        self.media = media or type(
-            "Media",
-            (),
-            {"user_id": "@owner:example.com", "url_cache": None},
-        )()
+        self.metadata_attempts: list[list[str]] = []
+        self.deleted_media_ids: list[list[str]] = []
+        self.media: Any = (
+            media
+            or type(
+                "Media",
+                (),
+                {"user_id": "@owner:example.com", "url_cache": None},
+            )()
+        )
 
-    async def get_local_media(self, media_id: str):
+    async def get_local_media(self, media_id: str) -> Any:
         assert self.lock.active
         self.events.append("lookup")
         if self.media_by_id is not None:
             return self.media_by_id.get(media_id)
         return self.media
 
-    async def get_local_media_thumbnails(self, media_id: str):
+    async def get_local_media_thumbnails(self, media_id: str) -> list[ThumbnailInfo]:
         assert self.lock.active
         return self.thumbnails
 
-    async def delete_local_media(self, media_ids):
+    async def delete_local_media(self, media_ids: list[str]) -> None:
         assert self.lock.active
         self.metadata_attempts.append(list(media_ids))
         if self.metadata_failure is not None:
@@ -171,7 +179,7 @@ class _FakeStorage:
         self.events = events
         self.failure = failure
         self.file_infos: list[FileInfo] = []
-        self.delete_calls = []
+        self.delete_calls: list[list[FileInfo]] = []
 
     async def delete_files(self, file_infos: list[FileInfo]) -> None:
         assert self.lock.active
@@ -185,6 +193,7 @@ class _FakeStorage:
 
 class _FakeMediaRepository:
     def __init__(self, lock: _FakeLock, storage: _FakeStorage):
+        self.lock = lock
         self.local_media_upload_linearizer = lock
         self.media_storage = storage
         self.deleted_notifications: list[str] = []
@@ -196,7 +205,7 @@ class _FakeMediaRepository:
 
 class TelecryptStorageValidationTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.hs = _FakeHomeServer()
+        self.hs: Any = _FakeHomeServer()
 
     def test_accepts_unique_local_mxc_identifiers(self) -> None:
         self.assertEqual(
@@ -234,10 +243,12 @@ class TelecryptStorageValidationTests(unittest.TestCase):
         self.assertEqual(infos[0].file_id, "file")
         self.assertIsNone(infos[0].thumbnail)
         self.assertEqual(infos[1].file_id, "file")
+        thumbnails = [info.thumbnail for info in infos[1:]]
         self.assertEqual(
             [
-                (info.thumbnail.width, info.thumbnail.height, info.thumbnail.method)
-                for info in infos[1:]
+                (thumbnail.width, thumbnail.height, thumbnail.method)
+                for thumbnail in thumbnails
+                if thumbnail is not None
             ],
             [
                 (32, 32, "crop"),
@@ -250,29 +261,30 @@ class TelecryptStorageValidationTests(unittest.TestCase):
 
     def test_rejects_oversized_delete_request_body(self) -> None:
         with self.assertRaises(SynapseError):
-            enforce_delete_body_limit(
-                _FakeRequest(
-                    b"x" * (32 * 1024 + 1),
-                    content_length=str(32 * 1024 + 1),
-                )
+            request: Any = _FakeRequest(
+                b"x" * (32 * 1024 + 1),
+                content_length=str(32 * 1024 + 1),
             )
+            enforce_delete_body_limit(request)
 
     def test_rejects_delete_request_without_content_length(self) -> None:
         with self.assertRaises(SynapseError):
-            enforce_delete_body_limit(_FakeRequest(b"{}"))
+            request: Any = _FakeRequest(b"{}")
+            enforce_delete_body_limit(request)
 
     def test_rejects_body_larger_than_advertised_limit(self) -> None:
         with self.assertRaises(SynapseError):
-            enforce_delete_body_limit(
-                _FakeRequest(b"x" * (32 * 1024 + 1), content_length="1")
-            )
+            request: Any = _FakeRequest(b"x" * (32 * 1024 + 1), content_length="1")
+            enforce_delete_body_limit(request)
 
     @defer.inlineCallbacks
-    def test_delete_serializes_lookup_storage_and_metadata(self) -> None:
+    def test_delete_serializes_lookup_storage_and_metadata(
+        self,
+    ) -> Generator[Deferred[Any], Any, None]:
         events: list[str] = []
         lock = _FakeLock(events)
         storage = _FakeStorage(lock, events)
-        servlet = TelecryptDeleteMediaServlet.__new__(TelecryptDeleteMediaServlet)
+        servlet: Any = TelecryptDeleteMediaServlet.__new__(TelecryptDeleteMediaServlet)
         servlet.auth = _FakeAuth()
         servlet.store = _FakeStore(
             lock,
@@ -321,7 +333,9 @@ class TelecryptStorageValidationTests(unittest.TestCase):
         )
 
     @defer.inlineCallbacks
-    def test_delete_rejects_foreign_media_without_mutation(self) -> None:
+    def test_delete_rejects_foreign_media_without_mutation(
+        self,
+    ) -> Generator[Deferred[Any], Any, None]:
         events: list[str] = []
         lock = _FakeLock(events)
         storage = _FakeStorage(lock, events)
@@ -341,7 +355,7 @@ class TelecryptStorageValidationTests(unittest.TestCase):
             thumbnails=_frozen_thumbnails(),
             media_by_id={"owned": owned_media, "foreign": foreign_media},
         )
-        servlet = TelecryptDeleteMediaServlet.__new__(TelecryptDeleteMediaServlet)
+        servlet: Any = TelecryptDeleteMediaServlet.__new__(TelecryptDeleteMediaServlet)
         servlet.auth = _FakeAuth()
         servlet.store = store
         servlet.media_repo = _FakeMediaRepository(lock, storage)
@@ -371,7 +385,9 @@ class TelecryptStorageValidationTests(unittest.TestCase):
         self.assertEqual(store.deleted_media_ids, [])
 
     @defer.inlineCallbacks
-    def test_provider_failure_returns_502_without_metadata_mutation(self) -> None:
+    def test_provider_failure_returns_502_without_metadata_mutation(
+        self,
+    ) -> Generator[Deferred[Any], Any, None]:
         events: list[str] = []
         lock = _FakeLock(events)
         storage = _FakeStorage(
@@ -384,7 +400,7 @@ class TelecryptStorageValidationTests(unittest.TestCase):
             events,
             thumbnails=_frozen_thumbnails(),
         )
-        servlet = TelecryptDeleteMediaServlet.__new__(TelecryptDeleteMediaServlet)
+        servlet: Any = TelecryptDeleteMediaServlet.__new__(TelecryptDeleteMediaServlet)
         servlet.auth = _FakeAuth()
         servlet.store = store
         servlet.media_repo = _FakeMediaRepository(lock, storage)
@@ -408,7 +424,9 @@ class TelecryptStorageValidationTests(unittest.TestCase):
         self.assertEqual(store.deleted_media_ids, [])
 
     @defer.inlineCallbacks
-    def test_database_failure_after_provider_delete_is_retryable(self) -> None:
+    def test_database_failure_after_provider_delete_is_retryable(
+        self,
+    ) -> Generator[Deferred[Any], Any, None]:
         events: list[str] = []
         lock = _FakeLock(events)
         storage = _FakeStorage(lock, events)
@@ -418,7 +436,7 @@ class TelecryptStorageValidationTests(unittest.TestCase):
             thumbnails=_frozen_thumbnails(),
             metadata_failure=RuntimeError("database failure"),
         )
-        servlet = TelecryptDeleteMediaServlet.__new__(TelecryptDeleteMediaServlet)
+        servlet: Any = TelecryptDeleteMediaServlet.__new__(TelecryptDeleteMediaServlet)
         servlet.auth = _FakeAuth()
         servlet.store = store
         servlet.media_repo = _FakeMediaRepository(lock, storage)
@@ -460,7 +478,9 @@ class TelecryptStorageValidationTests(unittest.TestCase):
         )
 
     @defer.inlineCallbacks
-    def test_delete_rejects_url_cache_before_owner_lookup(self) -> None:
+    def test_delete_rejects_url_cache_before_owner_lookup(
+        self,
+    ) -> Generator[Deferred[Any], Any, None]:
         events: list[str] = []
         lock = _FakeLock(events)
         storage = _FakeStorage(lock, events)
@@ -469,7 +489,7 @@ class TelecryptStorageValidationTests(unittest.TestCase):
             (),
             {"user_id": None, "url_cache": "https://example.invalid/image"},
         )()
-        servlet = TelecryptDeleteMediaServlet.__new__(TelecryptDeleteMediaServlet)
+        servlet: Any = TelecryptDeleteMediaServlet.__new__(TelecryptDeleteMediaServlet)
         servlet.auth = _FakeAuth()
         servlet.store = _FakeStore(lock, events, url_cache_media)
         servlet.media_repo = _FakeMediaRepository(lock, storage)
