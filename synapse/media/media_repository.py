@@ -367,95 +367,107 @@ class MediaRepository:
         sha256reader = SHA256TransparentIOReader(content)
         # This implements all of IO as it has a passthrough
         fname = await self.media_storage.store_file(sha256reader.wrap(), file_info)
-        sha256 = sha256reader.hexdigest()
-        should_quarantine = await self.store.get_is_hash_quarantined(sha256)
+        try:
+            sha256 = sha256reader.hexdigest()
+            should_quarantine = await self.store.get_is_hash_quarantined(sha256)
 
-        logger.info("Stored local media in file %r", fname)
+            logger.info("Stored local media in file %r", fname)
 
-        if should_quarantine:
-            logger.warning(
-                "Media has been automatically quarantined as it matched existing quarantined media"
-            )
-
-        # Check that the user has not exceeded any of the media upload limits.
-
-        # Use limits from module API if provided
-        media_upload_limits = (
-            await self.media_repository_callbacks.get_media_upload_limits_for_user(
-                auth_user.to_string()
-            )
-        )
-
-        # Otherwise use the default limits from config
-        if media_upload_limits is None:
-            # Note: the media upload limits are sorted so larger time periods are
-            # first.
-            media_upload_limits = self.default_media_upload_limits
-
-        # This is the total size of media uploaded by the user in the last
-        # `time_period_ms` milliseconds, or None if we haven't checked yet.
-        uploaded_media_size: int | None = None
-
-        for limit in media_upload_limits:
-            # We only need to check the amount of media uploaded by the user in
-            # this latest (smaller) time period if the amount of media uploaded
-            # in a previous (larger) time period is below the limit.
-            #
-            # This optimization means that in the common case where the user
-            # hasn't uploaded much media, we only need to query the database
-            # once.
-            if (
-                uploaded_media_size is None
-                or uploaded_media_size + content_length > limit.max_bytes
-            ):
-                uploaded_media_size = await self.store.get_media_uploaded_size_for_user(
-                    user_id=auth_user.to_string(), time_period_ms=limit.time_period_ms
+            if should_quarantine:
+                logger.warning(
+                    "Media has been automatically quarantined as it matched existing quarantined media"
                 )
 
-            if uploaded_media_size + content_length > limit.max_bytes:
-                await self.media_repository_callbacks.on_media_upload_limit_exceeded(
-                    user_id=auth_user.to_string(),
-                    limit=limit,
-                    sent_bytes=uploaded_media_size,
-                    attempted_bytes=content_length,
-                )
+            # Check that the user has not exceeded any of the media upload limits.
 
-                # Fall back to the static page served by Synapse when the limit
-                # doesn't specify its own `info_uri` (e.g. limits returned by a
-                # module callback without one).
-                info_uri = (
-                    limit.info_uri
-                    or self.hs.config.media.media_upload_limit_fallback_info_uri
+            # Use limits from module API if provided
+            media_upload_limits = (
+                await self.media_repository_callbacks.get_media_upload_limits_for_user(
+                    auth_user.to_string()
                 )
-
-                raise UserLimitExceededError(
-                    403,
-                    "Media upload limit exceeded",
-                    info_uri=info_uri,
-                    can_upgrade=limit.can_upgrade,
-                )
-
-        if is_new_media:
-            await self.store.store_local_media(
-                media_id=media_id,
-                media_type=media_type,
-                time_now_ms=self.clock.time_msec(),
-                upload_name=upload_name,
-                media_length=content_length,
-                user_id=auth_user,
-                sha256=sha256,
-                quarantined_by="system" if should_quarantine else None,
             )
-        else:
-            await self.store.update_local_media(
-                media_id=media_id,
-                media_type=media_type,
-                upload_name=upload_name,
-                media_length=content_length,
-                user_id=auth_user,
-                sha256=sha256,
-                quarantined_by="system" if should_quarantine else None,
-            )
+
+            # Otherwise use the default limits from config
+            if media_upload_limits is None:
+                # Note: the media upload limits are sorted so larger time periods are
+                # first.
+                media_upload_limits = self.default_media_upload_limits
+
+            # This is the total size of media uploaded by the user in the last
+            # `time_period_ms` milliseconds, or None if we haven't checked yet.
+            uploaded_media_size: int | None = None
+
+            for limit in media_upload_limits:
+                # We only need to check the amount of media uploaded by the user in
+                # this latest (smaller) time period if the amount of media uploaded
+                # in a previous (larger) time period is below the limit.
+                #
+                # This optimization means that in the common case where the user
+                # hasn't uploaded much media, we only need to query the database
+                # once.
+                if (
+                    uploaded_media_size is None
+                    or uploaded_media_size + content_length > limit.max_bytes
+                ):
+                    uploaded_media_size = await self.store.get_media_uploaded_size_for_user(
+                        user_id=auth_user.to_string(), time_period_ms=limit.time_period_ms
+                    )
+
+                if uploaded_media_size + content_length > limit.max_bytes:
+                    await self.media_repository_callbacks.on_media_upload_limit_exceeded(
+                        user_id=auth_user.to_string(),
+                        limit=limit,
+                        sent_bytes=uploaded_media_size,
+                        attempted_bytes=content_length,
+                    )
+
+                    # Fall back to the static page served by Synapse when the limit
+                    # doesn't specify its own `info_uri` (e.g. limits returned by a
+                    # module callback without one).
+                    info_uri = (
+                        limit.info_uri
+                        or self.hs.config.media.media_upload_limit_fallback_info_uri
+                    )
+
+                    raise UserLimitExceededError(
+                        403,
+                        "Media upload limit exceeded",
+                        info_uri=info_uri,
+                        can_upgrade=limit.can_upgrade,
+                    )
+
+            if is_new_media:
+                await self.store.store_local_media(
+                    media_id=media_id,
+                    media_type=media_type,
+                    time_now_ms=self.clock.time_msec(),
+                    upload_name=upload_name,
+                    media_length=content_length,
+                    user_id=auth_user,
+                    sha256=sha256,
+                    quarantined_by="system" if should_quarantine else None,
+                )
+            else:
+                await self.store.update_local_media(
+                    media_id=media_id,
+                    media_type=media_type,
+                    upload_name=upload_name,
+                    media_length=content_length,
+                    user_id=auth_user,
+                    sha256=sha256,
+                    quarantined_by="system" if should_quarantine else None,
+                )
+
+        except Exception as error:
+            try:
+                recorded = await self.store.get_local_media(media_id)
+                if recorded is None or recorded.media_length is None:
+                    await self.media_storage.delete_files([file_info])
+            except Exception as cleanup_error:
+                raise RuntimeError(
+                    f"Upload {media_id} failed and its media cleanup could not be established: {cleanup_error}"
+                ) from error
+            raise
 
         await self.media_repository_callbacks.on_media_uploaded(
             user_id=auth_user.to_string(),
