@@ -458,12 +458,12 @@ class MediaRepository:
                     quarantined_by="system" if should_quarantine else None,
                 )
 
-        except Exception as error:
+        except BaseException as error:
             try:
                 recorded = await self.store.get_local_media(media_id)
                 if recorded is None or recorded.media_length is None:
                     await self.media_storage.delete_files([file_info])
-            except Exception as cleanup_error:
+            except BaseException as cleanup_error:
                 raise RuntimeError(
                     f"Upload {media_id} failed and its media cleanup could not be established: {cleanup_error}"
                 ) from error
