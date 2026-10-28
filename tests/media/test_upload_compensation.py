@@ -7,7 +7,13 @@ from synapse.media.media_repository import MediaRepository
 
 class UploadCompensationTest(IsolatedAsyncioTestCase):
     async def test_metadata_and_provider_outcomes(self) -> None:
-        for scenario in ("absent", "commit-then-error", "read-fails", "cleanup-fails", "success"):
+        for scenario in (
+            "absent",
+            "commit-then-error",
+            "read-fails",
+            "cleanup-fails",
+            "success",
+        ):
             with self.subTest(scenario=scenario):
                 objects = {}
                 rows = {}
@@ -35,7 +41,9 @@ class UploadCompensationTest(IsolatedAsyncioTestCase):
 
                     async def store_local_media(self, **kwargs):
                         if scenario in ("commit-then-error", "success"):
-                            rows[kwargs["media_id"]] = SimpleNamespace(media_length=kwargs["media_length"])
+                            rows[kwargs["media_id"]] = SimpleNamespace(
+                                media_length=kwargs["media_length"]
+                            )
                         if scenario != "success":
                             raise RuntimeError("insert failed")
 
@@ -47,12 +55,19 @@ class UploadCompensationTest(IsolatedAsyncioTestCase):
                         notifications.append(kwargs)
 
                 repo = SimpleNamespace(
-                    media_storage=Storage(), store=Store(), media_repository_callbacks=Callbacks(),
-                    clock=SimpleNamespace(time_msec=lambda: 1), default_media_upload_limits=[],
+                    media_storage=Storage(),
+                    store=Store(),
+                    media_repository_callbacks=Callbacks(),
+                    clock=SimpleNamespace(time_msec=lambda: 1),
+                    default_media_upload_limits=[],
                     server_name="example.test",
                 )
                 call = MediaRepository.create_or_update_content(
-                    repo, "application/octet-stream", None, BytesIO(b"content"), 7,
+                    repo,
+                    "application/octet-stream",
+                    None,
+                    BytesIO(b"content"),
+                    7,
                     SimpleNamespace(to_string=lambda: "@test:example.test"),
                 )
                 if scenario == "success":
@@ -63,8 +78,12 @@ class UploadCompensationTest(IsolatedAsyncioTestCase):
                         await call
                     if scenario in ("cleanup-fails", "read-fails"):
                         self.assertIn(next(iter(objects)), str(caught.exception))
-                        self.assertEqual(str(caught.exception.__cause__), "insert failed")
+                        self.assertEqual(
+                            str(caught.exception.__cause__), "insert failed"
+                        )
                     else:
                         self.assertEqual(str(caught.exception), "insert failed")
                 self.assertEqual(len(objects), 0 if scenario == "absent" else 1)
-                self.assertEqual(len(rows), 1 if scenario in ("commit-then-error", "success") else 0)
+                self.assertEqual(
+                    len(rows), 1 if scenario in ("commit-then-error", "success") else 0
+                )

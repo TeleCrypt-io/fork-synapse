@@ -409,16 +409,21 @@ class MediaRepository:
                     uploaded_media_size is None
                     or uploaded_media_size + content_length > limit.max_bytes
                 ):
-                    uploaded_media_size = await self.store.get_media_uploaded_size_for_user(
-                        user_id=auth_user.to_string(), time_period_ms=limit.time_period_ms
+                    uploaded_media_size = (
+                        await self.store.get_media_uploaded_size_for_user(
+                            user_id=auth_user.to_string(),
+                            time_period_ms=limit.time_period_ms,
+                        )
                     )
 
                 if uploaded_media_size + content_length > limit.max_bytes:
-                    await self.media_repository_callbacks.on_media_upload_limit_exceeded(
-                        user_id=auth_user.to_string(),
-                        limit=limit,
-                        sent_bytes=uploaded_media_size,
-                        attempted_bytes=content_length,
+                    await (
+                        self.media_repository_callbacks.on_media_upload_limit_exceeded(
+                            user_id=auth_user.to_string(),
+                            limit=limit,
+                            sent_bytes=uploaded_media_size,
+                            attempted_bytes=content_length,
+                        )
                     )
 
                     # Fall back to the static page served by Synapse when the limit
